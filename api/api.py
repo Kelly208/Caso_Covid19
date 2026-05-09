@@ -1,20 +1,43 @@
+import os
+import logging
+from typing import List, Any
+
 from sodapy import Socrata
 
-def fetch_covid_data(nombre_departamento, limite_registros):
-    BASE_URL = "www.datos.gov.co"
-    DATASET_ID = "gt2j-8ykr"
+logger = logging.getLogger(__name__)
+
+
+def fetch_covid_data(nombre_departamento: str, limite_registros: int) -> List[Any]:
+    """Consulta el dataset publico y devuelve una lista de registros."""
+    BASE_URL = os.getenv("COVID_BASE_URL", "www.datos.gov.co")
+    DATASET_ID = os.getenv("COVID_DATASET_ID", "gt2j-8ykr")
+
+    if not isinstance(nombre_departamento, str) or not nombre_departamento.strip():
+        logger.error("nombre_departamento invalido: %r", nombre_departamento)
+        return []
+    if not isinstance(limite_registros, int) or limite_registros <= 0:
+        logger.error("limite_registros invalido: %r", limite_registros)
+        return []
 
     try:
-        cliente = Socrata(BASE_URL, None)
+        cliente = Socrata(BASE_URL, None, timeout=10)
 
-        # Formato correcto para filtrar por departamento
-        query = f"departamento_nom='{nombre_departamento.upper()}'"  # Mayúsculas por si acaso
+        query = f"departamento_nom='{nombre_departamento.strip().upper()}'"
+        logger.debug(
+            "Realizando consulta Socrata: dataset=%s where=%s limit=%s",
+            DATASET_ID,
+            query,
+            limite_registros,
+        )
+
         resultados = cliente.get(DATASET_ID, where=query, limit=limite_registros)
 
         if not resultados:
-            print("⚠️ No se encontraron datos para el departamento ingresado. Revisa el nombre o intenta con otro.")
-        
+            logger.info("No se encontraron datos para el departamento: %s", nombre_departamento)
+            return []
+
         return resultados
-    except Exception as e:
-        print(f"Error al obtener los datos: {e}")
+
+    except Exception:
+        logger.exception("Error al obtener los datos desde Socrata (dataset=%s)", DATASET_ID)
         return []
